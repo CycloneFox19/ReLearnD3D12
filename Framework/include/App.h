@@ -93,7 +93,7 @@ private:
 	ComPtr<ID3D12DescriptorHeap> m_pHeapCBV; // descriptor heap for constant buffer view
 	ComPtr<ID3D12Resource> m_pVB; // vertex buffer
 	ComPtr<ID3D12Resource> m_pIB; // index buffer
-	ComPtr<ID3D12Resource> m_pCB[FrameCount]; // constant buffer
+	ComPtr<ID3D12Resource> m_pCB[FrameCount * 2]; // constant buffer
 	ComPtr<ID3D12RootSignature> m_pRootSignature; // root signature
 	ComPtr<ID3D12PipelineState> m_pPSO; // pipeline state object
 
@@ -105,7 +105,7 @@ private:
 	D3D12_INDEX_BUFFER_VIEW m_IBV; // index buffer view
 	D3D12_VIEWPORT m_Viewport; // viewport
 	D3D12_RECT m_Scissor; // scissor rectangle
-	ConstantBufferView<Transform> m_CBV[FrameCount]; // constant buffer view
+	ConstantBufferView<Transform> m_CBV[FrameCount * 2]; // constant buffer view
 	float m_RotateAngle; // angle of rotation
 
 	//====================================================================================================

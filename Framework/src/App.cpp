@@ -472,7 +472,8 @@ void App::Render()
 	// update parameters
 	{
 		m_RotateAngle += 0.025f;
-		m_CBV[m_FrameIndex].pBuffer->World = DirectX::XMMatrixRotationY(m_RotateAngle);
+		m_CBV[2 * m_FrameIndex + 0].pBuffer->World = DirectX::XMMatrixRotationZ(m_RotateAngle + DirectX::XMConvertToRadians(45.f));
+		m_CBV[2 * m_FrameIndex + 1].pBuffer->World = DirectX::XMMatrixRotationY(m_RotateAngle) * DirectX::XMMatrixScaling(2.f, 0.5f, 1.f);
 	}
 
 	// initiate recording command
@@ -504,7 +505,6 @@ void App::Render()
 	{
 		m_pCmdList->SetGraphicsRootSignature(m_pRootSignature.Get());
 		m_pCmdList->SetDescriptorHeaps(1, m_pHeapCBV.GetAddressOf());
-		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[m_FrameIndex].Desc.BufferLocation);
 		m_pCmdList->SetPipelineState(m_pPSO.Get());
 
 		m_pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -513,6 +513,10 @@ void App::Render()
 		m_pCmdList->RSSetViewports(1, &m_Viewport);
 		m_pCmdList->RSSetScissorRects(1, &m_Scissor);
 
+		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[2 * m_FrameIndex + 0].Desc.BufferLocation);
+		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+
+		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[2 * m_FrameIndex + 1].Desc.BufferLocation);
 		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 	}
 
@@ -719,7 +723,7 @@ bool App::OnInit()
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC desc = {};
 		desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		desc.NumDescriptors = 1 * FrameCount;
+		desc.NumDescriptors = FrameCount * 2;
 		desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		desc.NodeMask = 0;
 
@@ -758,7 +762,7 @@ bool App::OnInit()
 
 		size_t incrementSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-		for (uint32_t i = 0; i < FrameCount; ++i)
+		for (uint32_t i = 0; i < FrameCount * 2; ++i)
 		{
 			// generate resource
 			HRESULT hr = m_pDevice->CreateCommittedResource(
@@ -982,7 +986,7 @@ bool App::OnInit()
 //--------------------------------------------------------------------------------------------------------
 void App::OnTerm()
 {
-	for (uint32_t i = 0; i < FrameCount; ++i)
+	for (uint32_t i = 0; i < 2 * FrameCount; ++i)
 	{
 		if (m_pCB[i].Get() != nullptr)
 		{
