@@ -86,10 +86,12 @@ private:
 	ComPtr<ID3D12CommandQueue> m_pQueue; // command queue
 	ComPtr<IDXGISwapChain3> m_pSwapChain; // swap chain
 	ComPtr<ID3D12Resource> m_pColorBuffer[FrameCount]; // color buffer
+	ComPtr<ID3D12Resource> m_pDepthBuffer; // depth buffer
 	ComPtr<ID3D12CommandAllocator> m_pCmdAllocator[FrameCount]; // command allocator
 	ComPtr<ID3D12GraphicsCommandList> m_pCmdList; // command list
 	ComPtr<ID3D12DescriptorHeap> m_pHeapRTV; // descriptor heap for render target view
 	ComPtr<ID3D12Fence> m_pFence; // fence
+	ComPtr<ID3D12DescriptorHeap> m_pHeapDSV; // descriptor heap for depth stencil view
 	ComPtr<ID3D12DescriptorHeap> m_pHeapCBV; // descriptor heap for constant buffer view
 	ComPtr<ID3D12Resource> m_pVB; // vertex buffer
 	ComPtr<ID3D12Resource> m_pIB; // index buffer
@@ -101,6 +103,7 @@ private:
 	uint64_t m_FenceCounter[FrameCount]; // fence counter
 	uint32_t m_FrameIndex; // index of frame
 	D3D12_CPU_DESCRIPTOR_HANDLE m_HandleRTV[FrameCount]; // CPU descriptor for render target view
+	D3D12_CPU_DESCRIPTOR_HANDLE m_HandleDSV; // CPU descriptor handle for depth stencil view
 	D3D12_VERTEX_BUFFER_VIEW m_VBV; // vertex buffer view
 	D3D12_INDEX_BUFFER_VIEW m_IBV; // index buffer view
 	D3D12_VIEWPORT m_Viewport; // viewport

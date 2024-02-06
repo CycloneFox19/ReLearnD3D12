@@ -42,6 +42,7 @@ App::App(uint32_t width, uint32_t height)
 	, m_pSwapChain(nullptr)
 	, m_pCmdList(nullptr)
 	, m_pHeapRTV(nullptr)
+	, m_pHeapDSV(nullptr)
 	, m_pFence(nullptr)
 	, m_FrameIndex(0)
 	, m_RotateAngle(0.f)
@@ -387,6 +388,75 @@ bool App::InitD3D()
 		}
 	}
 
+	// generate depth stencil buffer
+	{
+		// heap property
+		D3D12_HEAP_PROPERTIES prop = {};
+		prop.Type = D3D12_HEAP_TYPE_DEFAULT;
+		prop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		prop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		prop.CreationNodeMask = 1;
+		prop.VisibleNodeMask = 1;
+
+		D3D12_RESOURCE_DESC resDesc = {};
+		resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		resDesc.Alignment = 0;
+		resDesc.Width = m_Width;
+		resDesc.Height = m_Height;
+		resDesc.DepthOrArraySize = 1;
+		resDesc.MipLevels = 1;
+		resDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		resDesc.SampleDesc.Count = 1;
+		resDesc.SampleDesc.Quality = 0;
+		resDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+		D3D12_CLEAR_VALUE clearValue;
+		clearValue.Format = DXGI_FORMAT_D32_FLOAT; // If I change this into R32, what will happen?
+		clearValue.DepthStencil.Depth = 1.f;
+		clearValue.DepthStencil.Stencil = 0;
+
+		hr = m_pDevice->CreateCommittedResource(
+			&prop,
+			D3D12_HEAP_FLAG_NONE,
+			&resDesc,
+			D3D12_RESOURCE_STATE_DEPTH_WRITE,
+			&clearValue,
+			IID_PPV_ARGS(m_pDepthBuffer.GetAddressOf()));
+		if (FAILED(hr))
+		{
+			return false;
+		}
+
+		// settings of descriptor heap
+		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+		heapDesc.NumDescriptors = 1;
+		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		heapDesc.NodeMask = 0;
+
+		hr = m_pDevice->CreateDescriptorHeap(
+			&heapDesc,
+			IID_PPV_ARGS(m_pHeapDSV.GetAddressOf()));
+		if (FAILED(hr))
+		{
+			return false;
+		}
+
+		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_pHeapDSV->GetCPUDescriptorHandleForHeapStart();
+		UINT incrementSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc = {};
+		viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		viewDesc.Texture2D.MipSlice = 0;
+		viewDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+		m_pDevice->CreateDepthStencilView(m_pDepthBuffer.Get(), &viewDesc, handle);
+
+		m_HandleDSV = handle;
+	}
+
 	// generate fence
 	{
 		// reset fence counter
@@ -439,6 +509,10 @@ void App::TermD3D()
 	// abandon fence
 	m_pFence.Reset();
 
+	// abandon depth stencil buffer
+	m_pHeapDSV.Reset();
+	m_pDepthBuffer.Reset();
+
 	// abandon render target
 	m_pHeapRTV.Reset();
 	for (uint32_t i = 0u; i < FrameCount; ++i)
@@ -462,132 +536,6 @@ void App::TermD3D()
 
 	// abandon device
 	m_pDevice.Reset();
-}
-
-//--------------------------------------------------------------------------------------------------------
-//	 rendering
-//--------------------------------------------------------------------------------------------------------
-void App::Render()
-{
-	// update parameters
-	{
-		m_RotateAngle += 0.025f;
-		m_CBV[2 * m_FrameIndex + 0].pBuffer->World = DirectX::XMMatrixRotationZ(m_RotateAngle + DirectX::XMConvertToRadians(45.f));
-		m_CBV[2 * m_FrameIndex + 1].pBuffer->World = DirectX::XMMatrixRotationY(m_RotateAngle) * DirectX::XMMatrixScaling(2.f, 0.5f, 1.f);
-	}
-
-	// initiate recording command
-	m_pCmdAllocator[m_FrameIndex]->Reset();
-	m_pCmdList->Reset(m_pCmdAllocator[m_FrameIndex].Get(), nullptr);
-
-	// settings of resource barrier
-	D3D12_RESOURCE_BARRIER barrier = {};
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrier.Transition.pResource = m_pColorBuffer[m_FrameIndex].Get();
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	// resource barrier
-	m_pCmdList->ResourceBarrier(1, &barrier);
-
-	// set render target
-	m_pCmdList->OMSetRenderTargets(1, &m_HandleRTV[m_FrameIndex], FALSE, nullptr);
-
-	// set clear color
-	float clearColor[] = { 0.25f, 0.25f, 0.25f, 1.0f };
-
-	// clear render target view
-	m_pCmdList->ClearRenderTargetView(m_HandleRTV[m_FrameIndex], clearColor, 0, nullptr);
-
-	// rendering
-	{
-		m_pCmdList->SetGraphicsRootSignature(m_pRootSignature.Get());
-		m_pCmdList->SetDescriptorHeaps(1, m_pHeapCBV.GetAddressOf());
-		m_pCmdList->SetPipelineState(m_pPSO.Get());
-
-		m_pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		m_pCmdList->IASetVertexBuffers(0, 1, &m_VBV);
-		m_pCmdList->IASetIndexBuffer(&m_IBV);
-		m_pCmdList->RSSetViewports(1, &m_Viewport);
-		m_pCmdList->RSSetScissorRects(1, &m_Scissor);
-
-		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[2 * m_FrameIndex + 0].Desc.BufferLocation);
-		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-
-		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[2 * m_FrameIndex + 1].Desc.BufferLocation);
-		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-	}
-
-	// settings of resource barrier
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrier.Transition.pResource = m_pColorBuffer[m_FrameIndex].Get();
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	// resource barrier
-	m_pCmdList->ResourceBarrier(1, &barrier);
-
-	// finish recording command
-	m_pCmdList->Close();
-
-	// execute command
-	ID3D12CommandList* ppCmdLists[] = { m_pCmdList.Get()};
-	m_pQueue->ExecuteCommandLists(1, ppCmdLists);
-
-	// show on screen
-	Present(1);
-}
-
-//--------------------------------------------------------------------------------------------------------
-//	 wait for GPU to complete processing
-//--------------------------------------------------------------------------------------------------------
-void App::WaitGPU()
-{
-	assert(m_pQueue != nullptr);
-	assert(m_pFence != nullptr);
-	assert(m_FenceEvent != nullptr);
-
-	// signal
-	m_pQueue->Signal(m_pFence.Get(), m_FenceCounter[m_FrameIndex]);
-
-	// set event on completion of GPU processing
-	m_pFence->SetEventOnCompletion(m_FenceCounter[m_FrameIndex], m_FenceEvent);
-
-	// wait for signal
-	WaitForSingleObjectEx(m_FenceEvent, INFINITE, FALSE);
-
-	// increment counter
-	m_FenceCounter[m_FrameIndex]++;
-}
-
-//--------------------------------------------------------------------------------------------------------
-//	 show render target on screen and prepare for next frame
-//--------------------------------------------------------------------------------------------------------
-void App::Present(uint32_t interval)
-{
-	// show on screen
-	m_pSwapChain->Present(interval, 0);
-
-	// signal
-	const uint64_t currentValue = m_FenceCounter[m_FrameIndex];
-	m_pQueue->Signal(m_pFence.Get(), currentValue);
-
-	// update back buffer index
-	m_FrameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
-
-	// wait if preparation for next frame hasn't been done
-	if (m_pFence->GetCompletedValue() < m_FenceCounter[m_FrameIndex])
-	{
-		m_pFence->SetEventOnCompletion(m_FenceCounter[m_FrameIndex], m_FenceEvent);
-		WaitForSingleObjectEx(m_FenceEvent, INFINITE, FALSE);
-	}
-
-	// increment fence counter of next frame
-	m_FenceCounter[m_FrameIndex] = currentValue + 1;
 }
 
 //--------------------------------------------------------------------------------------------------------
@@ -919,6 +867,13 @@ bool App::OnInit()
 			descBS.RenderTarget[i] = descRTBS;
 		}
 
+		// configuration of depth stencil state
+		D3D12_DEPTH_STENCIL_DESC descDSS = {};
+		descDSS.DepthEnable = TRUE;
+		descDSS.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+		descDSS.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+		descDSS.StencilEnable = FALSE;
+
 		ComPtr<ID3DBlob> pVSBlob;
 		ComPtr<ID3DBlob> pPSBlob;
 
@@ -943,13 +898,12 @@ bool App::OnInit()
 		desc.PS = { pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize() };
 		desc.RasterizerState = descRS;
 		desc.BlendState = descBS;
-		desc.DepthStencilState.DepthEnable = FALSE;
-		desc.DepthStencilState.StencilEnable = FALSE;
+		desc.DepthStencilState = descDSS;
 		desc.SampleMask = UINT_MAX;
 		desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		desc.NumRenderTargets = 1;
 		desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-		desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+		desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
 
@@ -999,6 +953,135 @@ void App::OnTerm()
 	m_pIB.Reset();
 	m_pVB.Reset();
 	m_pPSO.Reset();
+}
+
+//--------------------------------------------------------------------------------------------------------
+//	 rendering
+//--------------------------------------------------------------------------------------------------------
+void App::Render()
+{
+	// update parameters
+	{
+		m_RotateAngle += 0.025f;
+		m_CBV[2 * m_FrameIndex + 0].pBuffer->World = DirectX::XMMatrixRotationZ(m_RotateAngle + DirectX::XMConvertToRadians(45.f));
+		m_CBV[2 * m_FrameIndex + 1].pBuffer->World = DirectX::XMMatrixRotationY(m_RotateAngle) * DirectX::XMMatrixScaling(2.f, 0.5f, 1.f);
+	}
+
+	// initiate recording command
+	m_pCmdAllocator[m_FrameIndex]->Reset();
+	m_pCmdList->Reset(m_pCmdAllocator[m_FrameIndex].Get(), nullptr);
+
+	// settings of resource barrier
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource = m_pColorBuffer[m_FrameIndex].Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	// resource barrier
+	m_pCmdList->ResourceBarrier(1, &barrier);
+
+	// set render target
+	m_pCmdList->OMSetRenderTargets(1, &m_HandleRTV[m_FrameIndex], FALSE, &m_HandleDSV);
+
+	// set clear color
+	float clearColor[] = { 0.25f, 0.25f, 0.25f, 1.0f };
+
+	// clear render target view
+	m_pCmdList->ClearRenderTargetView(m_HandleRTV[m_FrameIndex], clearColor, 0, nullptr);
+
+	// clear depth stencil view
+	m_pCmdList->ClearDepthStencilView(m_HandleDSV, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+
+	// rendering
+	{
+		m_pCmdList->SetGraphicsRootSignature(m_pRootSignature.Get());
+		m_pCmdList->SetDescriptorHeaps(1, m_pHeapCBV.GetAddressOf());
+		m_pCmdList->SetPipelineState(m_pPSO.Get());
+
+		m_pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		m_pCmdList->IASetVertexBuffers(0, 1, &m_VBV);
+		m_pCmdList->IASetIndexBuffer(&m_IBV);
+		m_pCmdList->RSSetViewports(1, &m_Viewport);
+		m_pCmdList->RSSetScissorRects(1, &m_Scissor);
+
+		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[2 * m_FrameIndex + 0].Desc.BufferLocation);
+		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+
+		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[2 * m_FrameIndex + 1].Desc.BufferLocation);
+		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+	}
+
+	// settings of resource barrier
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource = m_pColorBuffer[m_FrameIndex].Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+	// resource barrier
+	m_pCmdList->ResourceBarrier(1, &barrier);
+
+	// finish recording command
+	m_pCmdList->Close();
+
+	// execute command
+	ID3D12CommandList* ppCmdLists[] = { m_pCmdList.Get()};
+	m_pQueue->ExecuteCommandLists(1, ppCmdLists);
+
+	// show on screen
+	Present(1);
+}
+
+//--------------------------------------------------------------------------------------------------------
+//	 show render target on screen and prepare for next frame
+//--------------------------------------------------------------------------------------------------------
+void App::Present(uint32_t interval)
+{
+	// show on screen
+	m_pSwapChain->Present(interval, 0);
+
+	// signal
+	const uint64_t currentValue = m_FenceCounter[m_FrameIndex];
+	m_pQueue->Signal(m_pFence.Get(), currentValue);
+
+	// update back buffer index
+	m_FrameIndex = m_pSwapChain->GetCurrentBackBufferIndex();
+
+	// wait if preparation for next frame hasn't been done
+	if (m_pFence->GetCompletedValue() < m_FenceCounter[m_FrameIndex])
+	{
+		m_pFence->SetEventOnCompletion(m_FenceCounter[m_FrameIndex], m_FenceEvent);
+		WaitForSingleObjectEx(m_FenceEvent, INFINITE, FALSE);
+	}
+
+	// increment fence counter of next frame
+	m_FenceCounter[m_FrameIndex] = currentValue + 1;
+}
+
+//--------------------------------------------------------------------------------------------------------
+//	 wait for GPU to complete processing
+//--------------------------------------------------------------------------------------------------------
+void App::WaitGPU()
+{
+	assert(m_pQueue != nullptr);
+	assert(m_pFence != nullptr);
+	assert(m_FenceEvent != nullptr);
+
+	// signal
+	m_pQueue->Signal(m_pFence.Get(), m_FenceCounter[m_FrameIndex]);
+
+	// set event on completion of GPU processing
+	m_pFence->SetEventOnCompletion(m_FenceCounter[m_FrameIndex], m_FenceEvent);
+
+	// wait for signal
+	WaitForSingleObjectEx(m_FenceEvent, INFINITE, FALSE);
+
+	// increment counter
+	m_FenceCounter[m_FrameIndex]++;
 }
 
 //--------------------------------------------------------------------------------------------------------
