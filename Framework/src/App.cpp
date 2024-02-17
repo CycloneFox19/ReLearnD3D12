@@ -966,7 +966,7 @@ bool App::OnInit()
 		m_Viewport.Width = static_cast<float>(m_Width);
 		m_Viewport.Height = static_cast<float>(m_Height);
 		m_Viewport.MinDepth = 0.f;
-		m_Viewport.MaxDepth = 0.f;
+		m_Viewport.MaxDepth = 1.f;
 
 		m_Scissor.left = 0;
 		m_Scissor.right = m_Width;
