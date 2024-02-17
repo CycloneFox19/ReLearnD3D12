@@ -1,21 +1,28 @@
-struct VSOutput
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// MSOutput structure
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+struct MSOutput
 {
-    float4 Position : SV_POSITION;
-    float4 Color : COLOR;
+    float4 Position : SV_POSITION; // position coordinates
+    float4 Color : COLOR; // color of vertex
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// PSOutput structure
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct PSOutput
 {
-    float4 Color : SV_TARGET0;
+    float4 Color : SV_TARGET0; // color of pixel
 };
 
 //--------------------------------------------------------------------------------------------------------
-// main entry point of pixel shader
+//   main entry point of pixel shader
 //--------------------------------------------------------------------------------------------------------
-PSOutput main(VSOutput input)
+PSOutput main(MSOutput input)
 {
     PSOutput output = (PSOutput) 0;
     
     output.Color = input.Color;
+
     return output;
 }

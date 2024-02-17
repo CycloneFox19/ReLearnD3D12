@@ -28,10 +28,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="..\res\SimpleVS.hlsl">
+    <FxCompile Include="..\res\SimplePS.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
-    <FxCompile Include="..\res\SimplePS.hlsl">
+    <FxCompile Include="..\res\SimpleMS.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
   </ItemGroup>
