@@ -17,6 +17,7 @@
 //--------------------------------------------------------------------------------------------------------
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
 
@@ -45,6 +46,16 @@ template<typename T> struct ConstantBufferView
 	D3D12_CPU_DESCRIPTOR_HANDLE HandleCPU; // CPU descriptor handle
 	D3D12_GPU_DESCRIPTOR_HANDLE HandleGPU; // GPU descriptor handle
 	T* pBuffer; // pointer to the start of buffer
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Texture structure
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+struct Texture
+{
+	ComPtr<ID3D12Resource> pResource; // resource
+	D3D12_CPU_DESCRIPTOR_HANDLE HandleCPU; // CPU descriptor handle
+	D3D12_GPU_DESCRIPTOR_HANDLE HandleGPU; // GPU descriptor handle
 };
 
 
@@ -90,7 +101,7 @@ private:
 	ComPtr<ID3D12GraphicsCommandList> m_pCmdList; // command list
 	ComPtr<ID3D12DescriptorHeap> m_pHeapRTV; // descriptor heap for render target view
 	ComPtr<ID3D12Fence> m_pFence; // fence
-	ComPtr<ID3D12DescriptorHeap> m_pHeapCBV; // descriptor heap for constant buffer view
+	ComPtr<ID3D12DescriptorHeap> m_pHeapCBV_SRV_UAV; // descriptor heap for constant buffer view, shader resource view, and unordered access view
 	ComPtr<ID3D12Resource> m_pVB; // vertex buffer
 	ComPtr<ID3D12Resource> m_pIB; // index buffer
 	ComPtr<ID3D12Resource> m_pCB[FrameCount]; // constant buffer
@@ -107,6 +118,7 @@ private:
 	D3D12_RECT m_Scissor; // scissor rectangle
 	ConstantBufferView<Transform> m_CBV[FrameCount]; // constant buffer view
 	float m_RotateAngle; // angle of rotation
+	Texture m_Texture; // texture
 
 	//====================================================================================================
 	// Private methods

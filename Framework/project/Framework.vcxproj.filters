@@ -18,6 +18,9 @@
     <ClInclude Include="..\include\App.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\FileUtil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">
@@ -26,13 +29,19 @@
     <ClCompile Include="..\src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\FileUtil.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="..\res\SimpleVS.hlsl">
+    <FxCompile Include="..\res\SimpleTexPS.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
-    <FxCompile Include="..\res\SimplePS.hlsl">
+    <FxCompile Include="..\res\SimpleTexVS.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>
