@@ -379,6 +379,72 @@ bool App::InitD3D()
 		}
 	}
 
+	// generate depth stencil buffer
+	{
+		D3D12_HEAP_PROPERTIES prop = {};
+		prop.Type = D3D12_HEAP_TYPE_DEFAULT;
+		prop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		prop.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		prop.CreationNodeMask = 1;
+		prop.VisibleNodeMask = 1;
+
+		D3D12_RESOURCE_DESC resDesc = {};
+		resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		resDesc.Alignment = 0;
+		resDesc.Width = m_Width;
+		resDesc.Height = m_Height;
+		resDesc.DepthOrArraySize = 1;
+		resDesc.MipLevels = 1;
+		resDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		resDesc.SampleDesc.Count = 1;
+		resDesc.SampleDesc.Quality = 0;
+		resDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+		D3D12_CLEAR_VALUE clearValue;
+		clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+		clearValue.DepthStencil.Depth = 1.f;
+		clearValue.DepthStencil.Stencil = 0;
+
+		hr = m_pDevice->CreateCommittedResource(
+			&prop,
+			D3D12_HEAP_FLAG_NONE,
+			&resDesc,
+			D3D12_RESOURCE_STATE_DEPTH_WRITE,
+			&clearValue,
+			IID_PPV_ARGS(m_pDepthBuffer.GetAddressOf()));
+		if (FAILED(hr))
+		{
+			return false;
+		}
+
+		// configuration of descriptor heap
+		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+		heapDesc.NumDescriptors = 1;
+		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		heapDesc.NodeMask = 0;
+
+		hr = m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(m_pHeapDSV.GetAddressOf()));
+		if (FAILED(hr))
+		{
+			return false;
+		}
+
+		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_pHeapDSV->GetCPUDescriptorHandleForHeapStart();
+		UINT incrementSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc = {};
+		viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		viewDesc.Texture2D.MipSlice = 0;
+		viewDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+		m_pDevice->CreateDepthStencilView(m_pDepthBuffer.Get(), &viewDesc, handle);
+
+		m_HandleDSV = handle;
+	}
+
 	// generate fence
 	{
 		// reset fence counter
@@ -438,6 +504,10 @@ void App::TermD3D()
 		m_pColorBuffer[i].Reset();
 	}
 
+	// abandon depth stencil view
+	m_pHeapDSV.Reset();
+	m_pDepthBuffer.Reset();
+
 	// abandon command list
 	m_pCmdList.Reset();
 
@@ -484,7 +554,7 @@ void App::Render()
 	m_pCmdList->ResourceBarrier(1, &barrier);
 
 	// set render target
-	m_pCmdList->OMSetRenderTargets(1, &m_HandleRTV[m_FrameIndex], FALSE, nullptr);
+	m_pCmdList->OMSetRenderTargets(1, &m_HandleRTV[m_FrameIndex], FALSE, &m_HandleDSV);
 
 	// set clear color
 	float clearColor[] = { 0.25f, 0.25f, 0.25f, 1.0f };
@@ -492,10 +562,13 @@ void App::Render()
 	// clear render target view
 	m_pCmdList->ClearRenderTargetView(m_HandleRTV[m_FrameIndex], clearColor, 0, nullptr);
 
+	// clear depth stencil view
+	m_pCmdList->ClearDepthStencilView(m_HandleDSV, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+
 	// rendering
 	{
 		m_pCmdList->SetGraphicsRootSignature(m_pRootSignature.Get());
-		m_pCmdList->SetDescriptorHeaps(1, m_pHeapCBV_SRV_UAV.GetAddressOf());
+		m_pCmdList->SetDescriptorHeaps(1, m_pHeapCBV.GetAddressOf());
 		m_pCmdList->SetGraphicsRootConstantBufferView(0, m_CBV[m_FrameIndex].Desc.BufferLocation);
 		m_pCmdList->SetGraphicsRootDescriptorTable(1, m_Texture.HandleGPU);
 		m_pCmdList->SetPipelineState(m_pPSO.Get());
@@ -718,7 +791,7 @@ bool App::OnInit()
 
 		HRESULT hr = m_pDevice->CreateDescriptorHeap(
 			&desc,
-			IID_PPV_ARGS(m_pHeapCBV_SRV_UAV.GetAddressOf()));
+			IID_PPV_ARGS(m_pHeapCBV.GetAddressOf()));
 		if (FAILED(hr))
 		{
 			return false;
@@ -767,8 +840,8 @@ bool App::OnInit()
 			}
 
 			D3D12_GPU_VIRTUAL_ADDRESS address = m_pCB[i]->GetGPUVirtualAddress();
-			D3D12_CPU_DESCRIPTOR_HANDLE handleCPU = m_pHeapCBV_SRV_UAV->GetCPUDescriptorHandleForHeapStart();
-			D3D12_GPU_DESCRIPTOR_HANDLE handleGPU = m_pHeapCBV_SRV_UAV->GetGPUDescriptorHandleForHeapStart();
+			D3D12_CPU_DESCRIPTOR_HANDLE handleCPU = m_pHeapCBV->GetCPUDescriptorHandleForHeapStart();
+			D3D12_GPU_DESCRIPTOR_HANDLE handleGPU = m_pHeapCBV->GetGPUDescriptorHandleForHeapStart();
 
 			handleCPU.ptr += incrementSize * i;
 			handleGPU.ptr += incrementSize * i;
@@ -936,6 +1009,13 @@ bool App::OnInit()
 			descBS.RenderTarget[i] = descRTBS;
 		}
 
+		// configuration of depth stencil state
+		D3D12_DEPTH_STENCIL_DESC descDSS = {};
+		descDSS.DepthEnable = TRUE;
+		descDSS.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+		descDSS.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+		descDSS.StencilEnable = FALSE;
+
 		ComPtr<ID3DBlob> pVSBlob;
 		ComPtr<ID3DBlob> pPSBlob;
 
@@ -974,13 +1054,12 @@ bool App::OnInit()
 		desc.PS = { pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize() };
 		desc.RasterizerState = descRS;
 		desc.BlendState = descBS;
-		desc.DepthStencilState.DepthEnable = FALSE;
-		desc.DepthStencilState.StencilEnable = FALSE;
+		desc.DepthStencilState = descDSS;
 		desc.SampleMask = UINT_MAX;
 		desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		desc.NumRenderTargets = 1;
 		desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-		desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+		desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
 
@@ -1028,8 +1107,8 @@ bool App::OnInit()
 		UINT incrementSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 		// get CPU and GPU descriptor handle from descriptor heap
-		D3D12_CPU_DESCRIPTOR_HANDLE handleCPU = m_pHeapCBV_SRV_UAV->GetCPUDescriptorHandleForHeapStart();
-		D3D12_GPU_DESCRIPTOR_HANDLE handleGPU = m_pHeapCBV_SRV_UAV->GetGPUDescriptorHandleForHeapStart();
+		D3D12_CPU_DESCRIPTOR_HANDLE handleCPU = m_pHeapCBV->GetCPUDescriptorHandleForHeapStart();
+		D3D12_GPU_DESCRIPTOR_HANDLE handleGPU = m_pHeapCBV->GetGPUDescriptorHandleForHeapStart();
 
 		// distribute descriptor to texture
 		handleCPU.ptr += incrementSize * FrameCount;
@@ -1094,7 +1173,7 @@ void App::OnTerm()
 	m_pIB.Reset();
 	m_pVB.Reset();
 	m_pPSO.Reset();
-	m_pHeapCBV_SRV_UAV.Reset();
+	m_pHeapCBV.Reset();
 
 	m_VBV.BufferLocation = 0;
 	m_VBV.SizeInBytes = 0;
