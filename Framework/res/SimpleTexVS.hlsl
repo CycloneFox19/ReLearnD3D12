@@ -4,7 +4,9 @@
 struct VSInput
 {
     float3 Position : POSITION; // position coordinates
+    float3 Normal : NORMAL; // normal vector
     float2 TexCoord : TEXCOORD; // texture coordinates
+    float3 Tangent : TANGENT; // tangent vector
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
