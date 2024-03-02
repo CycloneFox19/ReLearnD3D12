@@ -3,6 +3,7 @@
 //--------------------------------------------------------------------------------------------------------
 // Includes
 //--------------------------------------------------------------------------------------------------------
+#define NOMINMAX
 #include <Windows.h>
 #include <cstdint>
 #include <d3d12.h>
@@ -10,6 +11,7 @@
 #include <wrl/client.h>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
+#include "Mesh.h"
 
 
 //--------------------------------------------------------------------------------------------------------
@@ -122,6 +124,8 @@ private:
 	ConstantBufferView<Transform> m_CBV[FrameCount]; // constant buffer view
 	float m_RotateAngle; // angle of rotation
 	Texture m_Texture; // texture
+	std::vector<Mesh> m_Meshes; // mesh
+	std::vector<Material> m_Materials; // material
 
 	//====================================================================================================
 	// Private methods

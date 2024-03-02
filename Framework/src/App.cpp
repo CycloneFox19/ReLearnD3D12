@@ -579,7 +579,8 @@ void App::Render()
 		m_pCmdList->RSSetViewports(1, &m_Viewport);
 		m_pCmdList->RSSetScissorRects(1, &m_Scissor);
 
-		m_pCmdList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+		uint32_t count = static_cast<uint32_t>(m_Meshes[0].Indices.size());
+		m_pCmdList->DrawIndexedInstanced(count, 1, 0, 0, 0);
 	}
 
 	// settings of resource barrier
@@ -657,15 +658,27 @@ void App::Present(uint32_t interval)
 //--------------------------------------------------------------------------------------------------------
 bool App::OnInit()
 {
+	// load mesh
+	{
+		std::wstring path;
+		if (!SearchFilePath(L"res/teapot/teapot.obj", path))
+		{
+			return false;
+		}
+
+		if (!LoadMesh(path.c_str(), m_Meshes, m_Materials))
+		{
+			return false;
+		}
+
+		// in this sample, single mesh is expected
+		assert(m_Meshes.size() == 1);
+	}
+
 	// generate vertex buffer
 	{
-		// vertex data
-		DirectX::VertexPositionTexture vertices[] = {
-			DirectX::VertexPositionTexture(DirectX::XMFLOAT3(-1.f,  1.f, 0.f), DirectX::XMFLOAT2(0.f, 0.f)),
-			DirectX::VertexPositionTexture(DirectX::XMFLOAT3( 1.f,  1.f, 0.f), DirectX::XMFLOAT2(1.f, 0.f)),
-			DirectX::VertexPositionTexture(DirectX::XMFLOAT3( 1.f, -1.f, 0.f), DirectX::XMFLOAT2(1.f, 1.f)),
-			DirectX::VertexPositionTexture(DirectX::XMFLOAT3(-1.f, -1.f, 0.f), DirectX::XMFLOAT2(0.f, 1.f))
-		};
+		size_t size = sizeof(MeshVertex) * m_Meshes[0].Vertices.size();
+		MeshVertex* vertices = m_Meshes[0].Vertices.data();
 
 		// heap property
 		D3D12_HEAP_PROPERTIES prop = {};
@@ -679,7 +692,7 @@ bool App::OnInit()
 		D3D12_RESOURCE_DESC desc = {};
 		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 		desc.Alignment = 0;
-		desc.Width = sizeof(vertices);
+		desc.Width = size;
 		desc.Height = 1;
 		desc.DepthOrArraySize = 1;
 		desc.MipLevels = 1;
@@ -711,20 +724,21 @@ bool App::OnInit()
 		}
 
 		// set vertex data to mapping destination
-		memcpy(ptr, vertices, sizeof(vertices));
+		memcpy(ptr, vertices, size);
 
 		// unmap memory
 		m_pVB->Unmap(0, nullptr);
 
 		// configuration of vertex buffer view
 		m_VBV.BufferLocation = m_pVB->GetGPUVirtualAddress();
-		m_VBV.SizeInBytes = static_cast<UINT>(sizeof(vertices));
-		m_VBV.StrideInBytes = static_cast<UINT>(sizeof(DirectX::VertexPositionTexture));
+		m_VBV.SizeInBytes = static_cast<UINT>(size);
+		m_VBV.StrideInBytes = static_cast<UINT>(sizeof(MeshVertex));
 	}
 
 	// generate index buffer
 	{
-		uint32_t indices[] = { 0, 1, 2, 0, 2, 3 };
+		size_t size = sizeof(uint32_t) * m_Meshes[0].Indices.size();
+		uint32_t* indices = m_Meshes[0].Indices.data();
 
 		// heap property
 		D3D12_HEAP_PROPERTIES prop = {};
@@ -738,7 +752,7 @@ bool App::OnInit()
 		D3D12_RESOURCE_DESC desc = {};
 		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 		desc.Alignment = 0;
-		desc.Width = sizeof(indices);
+		desc.Width = size;
 		desc.Height = 1;
 		desc.DepthOrArraySize = 1;
 		desc.MipLevels = 1;
@@ -770,7 +784,7 @@ bool App::OnInit()
 		}
 
 		// set index data to mapping destination
-		memcpy(ptr, indices, sizeof(indices));
+		memcpy(ptr, indices, size);
 
 		// unmap memory
 		m_pIB->Unmap(0, nullptr);
@@ -778,7 +792,7 @@ bool App::OnInit()
 		// settings of index buffer view
 		m_IBV.BufferLocation = m_pIB->GetGPUVirtualAddress();
 		m_IBV.Format = DXGI_FORMAT_R32_UINT;
-		m_IBV.SizeInBytes = sizeof(indices);
+		m_IBV.SizeInBytes = static_cast<UINT>(size);
 	}
 
 	// generate descriptor heap for CBV/SRV/UAV
@@ -862,7 +876,7 @@ bool App::OnInit()
 				return false;
 			}
 
-			DirectX::XMVECTOR eyePos = DirectX::XMVectorSet(0.f, 0.f, 5.f, 0.f);
+			DirectX::XMVECTOR eyePos = DirectX::XMVectorSet(0.f, 1.f, 2.f, 0.f);
 			DirectX::XMVECTOR targetPos = DirectX::XMVectorZero();
 			DirectX::XMVECTOR upward = DirectX::XMVectorSet(0.f, 1.f, 0.f, 0.f);
 
@@ -954,24 +968,6 @@ bool App::OnInit()
 
 	// generate pipeline state
 	{
-		// configuration of input layout
-		D3D12_INPUT_ELEMENT_DESC elements[2];
-		elements[0].SemanticName = "POSITION";
-		elements[0].SemanticIndex = 0;
-		elements[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-		elements[0].InputSlot = 0;
-		elements[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-		elements[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-		elements[0].InstanceDataStepRate = 0;
-
-		elements[1].SemanticName = "TEXCOORD";
-		elements[1].SemanticIndex = 0;
-		elements[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-		elements[1].InputSlot = 0;
-		elements[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-		elements[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-		elements[1].InstanceDataStepRate = 0;
-
 		// configuration of rasterizer state
 		D3D12_RASTERIZER_DESC descRS = {};
 		descRS.FillMode = D3D12_FILL_MODE_SOLID;
@@ -1048,7 +1044,7 @@ bool App::OnInit()
 
 		// configuration of pipeline state
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
-		desc.InputLayout = { elements, _countof(elements) };
+		desc.InputLayout = MeshVertex::InputLayout;
 		desc.pRootSignature = m_pRootSignature.Get();
 		desc.VS = { pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize() };
 		desc.PS = { pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize() };
@@ -1077,7 +1073,7 @@ bool App::OnInit()
 	{
 		// search for file path
 		std::wstring texturePath;
-		if (!SearchFilePath(L"res/SampleTexture.dds", texturePath))
+		if (!SearchFilePath(L"res/teapot/default.dds", texturePath))
 		{
 			return false;
 		}
@@ -1152,6 +1148,8 @@ bool App::OnInit()
 		m_Scissor.bottom = m_Height;
 	}
 
+	m_pCmdList->Close();
+
 	return true;
 }
 
@@ -1169,6 +1167,14 @@ void App::OnTerm()
 		}
 		m_pCB[i].Reset();
 	}
+
+	for (size_t i = 0; i < m_Meshes.size(); ++i)
+	{
+		m_Meshes[i].Vertices.clear();
+		m_Meshes[i].Indices.clear();
+	}
+	m_Meshes.clear();
+	m_Materials.clear();
 
 	m_pIB.Reset();
 	m_pVB.Reset();
